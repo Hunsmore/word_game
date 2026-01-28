@@ -974,10 +974,12 @@
                         english: english,
                         translation: translation,
                         language: selectedLanguage,
-                        count: 0
+                        count: 0,
+                        lastAdded: 0
                     };
                 }
                 errorStats[errorKey].count++;
+                errorStats[errorKey].lastAdded = Date.now();
                 
                 // 更新错误面板
                 updateErrorPanel();
@@ -1001,8 +1003,8 @@
                 errorPanelContent.innerHTML = '<div class="error-panel-empty">No errors</div>';
                 errorPagination.style.display = 'none';
             } else {
-                // 按错误次数排序
-                errorWords.sort((a, b) => b.count - a.count);
+                // 按最后加入时间排序，新加入的放在最前面
+                errorWords.sort((a, b) => (b.lastAdded || 0) - (a.lastAdded || 0));
                 
                 // 计算分页
                 const totalPages = Math.ceil(errorWords.length / errorsPerPage);
