@@ -428,202 +428,15 @@
         let errorStats = {}; // {word: {english: '', translation: '', language: '', count: 0}}
         let currentErrorPage = 1;
         const errorsPerPage = 5;
-        let speakTimeout = null; // 防抖计时器
         
         // 需要大字体的语言
         const largeFontLanguages = ['العربية', 'ภาษาไทย', 'ئۇيغۇرچە', 'हिन्दी'];
-        
-        // 语言代码映射（用于语音合成）
-        const languageCodes = {
-            'Deutsch': 'de-DE',
-            'Svenska': 'sv-SE',
-            'Nederlands': 'nl-NL',
-            'Français': 'fr-FR',
-            'Español': 'es-ES',
-            'Português': 'pt-PT',
-            'Italian': 'it-IT',
-            'Русский': 'ru-RU',
-            'Polski': 'pl-PL',
-            'Ελληνικά': 'el-GR',
-            'Magyar': 'hu-HU',
-            'Suomi': 'fi-FI',
-            '한국어': 'ko-KR',
-            '日本語': 'ja-JP',
-            'Tiếng Việt': 'vi-VN',
-            '粤语': 'yue-HK',  // 粤语（会尝试获取粤语语音）
-            '闽南语': 'nan-TW',  // 闽南语（可能不支持）
-            'العربية': 'ar-SA',
-            'हिन्दी': 'hi-IN',
-            'Gaeilge': 'ga-IE',
-            'Cymraeg': 'cy-GB',
-            'Монгол': 'mn-MN',
-            'Türkçe': 'tr-TR',
-            'ئۇيغۇرچە': 'ug-CN',
-            'ภาษาไทย': 'th-TH',
-            'Kiswahili': 'sw-KE',
-            'Bahasa Indonesia': 'id-ID',
-            'Diné Bizaad': 'nv-US'  // 纳瓦霍语（可能不支持）
-        };
-        
-        // 需要朗读转写内容的语言（拼音而非汉字）
-        const useTranscriptionLanguages = ['粤语', '闽南语'];
         
         // 带种子的随机数生成器（使用 timestamp 作为种子）
         let seed = Date.now();
         function seededRandom() {
             seed = (seed * 9301 + 49297) % 233280;
             return seed / 233280;
-        }
-        
-        // 获取指定语言的最佳语音
-        function getBestVoice(langCode, language) {
-            const voices = window.speechSynthesis.getVoices();
-            
-            // 特殊处理：粤语尝试多种语言代码
-            let langCodesToTry = [langCode];
-            if (language === '粤语') {
-                langCodesToTry = ['yue-HK', 'yue', 'zh-HK', 'zh-CN', 'zh-TW', 'zh'];
-            } else if (language === '闽南语') {
-                langCodesToTry = ['nan-TW', 'nan', 'zh-TW', 'zh'];
-            }
-            
-            let matchingVoices = [];
-            
-            // 尝试各种语言代码
-            for (const code of langCodesToTry) {
-                const filtered = voices.filter(voice => {
-                    const voiceLang = voice.lang.toLowerCase();
-                    const targetCode = code.toLowerCase();
-                    // 完全匹配或部分匹配
-                    return voiceLang === targetCode || 
-                           voiceLang.startsWith(targetCode.split('-')[0]) ||
-                           voiceLang.startsWith(targetCode);
-                });
-                
-                // 对粤语，优先选择包含 "cantonese" 或 "yue" 的语音
-                if (language === '粤语') {
-                    const cantoneseVoices = filtered.filter(v => 
-                        v.name.toLowerCase().includes('cantonese') || 
-                        v.name.toLowerCase().includes('yue') ||
-                        v.lang.toLowerCase().includes('yue')
-                    );
-                    if (cantoneseVoices.length > 0) {
-                        matchingVoices = cantoneseVoices;
-                        break;
-                    }
-                }
-                
-                if (filtered.length > 0) {
-                    matchingVoices = filtered;
-                    break;
-                }
-            }
-            
-            if (matchingVoices.length === 0) {
-                return null;
-            }
-            
-            // 优先级排序：选择最高质量的语音
-            const scoredVoices = matchingVoices.map(voice => {
-                let score = 0;
-                
-                // 本地语音加分
-                if (voice.localService) {
-                    score += 100;
-                }
-                
-                // 优质语音提供商加分
-                const name = voice.name.toLowerCase();
-                if (name.includes('google')) score += 50;
-                if (name.includes('apple')) score += 45;
-                if (name.includes('microsoft')) score += 40;
-                if (name.includes('enhanced') || name.includes('premium')) score += 30;
-                if (name.includes('natural') || name.includes('neural')) score += 25;
-                
-                // 粤语特殊加分
-                if (language === '粤语') {
-                    if (name.includes('cantonese')) score += 100;
-                    if (name.includes('yue')) score += 100;
-                }
-                
-                // 精确匹配语言代码加分
-                if (voice.lang === langCode) {
-                    score += 20;
-                }
-                
-                // 女声通常更悦耳
-                if (name.includes('female') || name.includes('woman')) {
-                    score += 5;
-                }
-                
-                return { voice, score };
-            });
-            
-            // 按分数排序，返回最高分的语音
-            scoredVoices.sort((a, b) => b.score - a.score);
-            return scoredVoices[0].voice;
-        }
-        
-        // 朗读单词（使用最高质量语音）
-        // text: 显示的文本（汉字）
-        // language: 语言名称
-        // transcription: 转写内容（粤拼、台罗等），如果有的话
-        function speakWord(text, language, transcription = null) {
-            return;
-            try {
-                // 检查浏览器是否支持语音合成
-                if (!window.speechSynthesis) {
-                    return;
-                }
-                
-                // 停止之前的朗读
-                window.speechSynthesis.cancel();
-                
-                // 获取语言代码
-                const langCode = languageCodes[language];
-                if (!langCode) {
-                    // 如果没有对应的语言代码，不朗读
-                    return;
-                }
-                
-                // 对于粤语和闽南语，优先使用转写内容
-                let textToSpeak = text;
-                if (useTranscriptionLanguages.includes(language) && transcription) {
-                    textToSpeak = transcription;
-                    console.debug(`朗读转写: ${language} - ${transcription} (显示: ${text})`);
-                }
-                
-                // 获取最佳语音
-                const bestVoice = getBestVoice(langCode, language);
-                
-                // 如果没有可用的语音，不朗读
-                if (!bestVoice) {
-                    console.debug('没有可用的语音:', language, langCode);
-                    return;
-                }
-                
-                console.debug(`使用语音: ${bestVoice.name} (${bestVoice.lang}) 朗读: ${textToSpeak}`);
-                
-                // 创建语音合成对象
-                const utterance = new SpeechSynthesisUtterance(textToSpeak);
-                utterance.voice = bestVoice;  // 使用选中的高质量语音
-                utterance.lang = bestVoice.lang;  // 使用语音自身的语言代码
-                utterance.rate = 0.9;  // 语速稍慢，便于学习
-                utterance.pitch = 1;   // 正常音调
-                utterance.volume = 1;  // 最大音量
-                
-                // 错误处理（静默失败）
-                utterance.onerror = (event) => {
-                    // 静默处理错误，不影响用户体验
-                    console.debug('语音合成失败:', event.error, '语言:', language);
-                };
-                
-                // 朗读
-                window.speechSynthesis.speak(utterance);
-            } catch (error) {
-                // 静默处理异常
-                console.debug('朗读失败:', error);
-            }
         }
         
         // 更新标题显示语言数量
@@ -848,25 +661,6 @@
             
             card.addEventListener('click', () => handleCardClick(card, word));
             
-            // 为翻译列添加悬浮朗读功能（带防抖）
-            if (type === 'translation') {
-                card.addEventListener('mouseenter', () => {
-                    // 清除之前的定时器
-                    clearTimeout(speakTimeout);
-                    // 设置200ms延迟，避免鼠标快速滑过时频繁触发
-                    speakTimeout = setTimeout(() => {
-                        // 传递转写内容（如果有）
-                        const transcription = word.original && word.original.transcription ? word.original.transcription : null;
-                        speakWord(word.text, selectedLanguage, transcription);
-                    }, 200);
-                });
-                
-                card.addEventListener('mouseleave', () => {
-                    // 鼠标离开时清除定时器，取消朗读
-                    clearTimeout(speakTimeout);
-                });
-            }
-            
             return card;
         }
 
@@ -1059,31 +853,8 @@
         }
 
 
-        // 初始化语音列表（某些浏览器需要等待）
-        function initVoices() {
-            return new Promise((resolve) => {
-                let voices = window.speechSynthesis.getVoices();
-                if (voices.length > 0) {
-                    resolve(voices);
-                    return;
-                }
-                
-                // 如果语音列表还未加载，等待 voiceschanged 事件
-                window.speechSynthesis.onvoiceschanged = () => {
-                    voices = window.speechSynthesis.getVoices();
-                    resolve(voices);
-                };
-                
-                // 设置超时，避免无限等待
-                setTimeout(() => resolve([]), 2000);
-            });
-        }
-        
         // 页面加载时初始化
-        window.addEventListener('load', async () => {
-            // 先初始化语音列表
-            await initVoices();
-            // 然后加载游戏
+        window.addEventListener('load', () => {
             loadWords();
         });
     </script>
