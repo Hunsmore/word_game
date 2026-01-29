@@ -552,12 +552,7 @@
             // 随机选择10个单词
             const shuffled = [...currentWords].sort(() => seededRandom() - 0.5);
             const selectedWords = shuffled.slice(0, 10);
-            
-            console.log('🎮 开始新游戏:', {
-                language: selectedLanguage,
-                wordCount: selectedWords.length,
-                sampleWord: selectedWords[0]
-            });
+            console.log(selectedWords.map(w => w.translation).join(', '));
             
             // 创建单词对并打乱
             const wordPairs = [];
@@ -717,19 +712,7 @@
             const translationPair = translationCard.dataset.pair;
             const englishText = englishCard.dataset.text;
             
-            console.log('🔍 匹配检查:', {
-                language: selectedLanguage,
-                english: englishText,
-                translation: translationText,
-                englishPair: englishPair,
-                translationPair: translationPair,
-                englishMatch: englishPair === translationText,
-                translationMatch: translationPair === englishText
-            });
-            
             if (englishPair === translationText && translationPair === englishText) {
-                // 匹配成功
-                console.log('✅ 匹配成功!');
                 englishCard.classList.remove('selected');
                 translationCard.classList.remove('selected');
                 englishCard.classList.add('matched');
@@ -745,16 +728,7 @@
                 
                 // 检查是否全部完成
                 checkGameComplete();
-            } else {
-                // 匹配失败
-                console.log('❌ 匹配失败!', {
-                    reason: '不匹配',
-                    englishPairBytes: [...englishPair].map(c => c.charCodeAt(0)),
-                    translationTextBytes: [...translationText].map(c => c.charCodeAt(0)),
-                    translationPairBytes: [...translationPair].map(c => c.charCodeAt(0)),
-                    englishTextBytes: [...englishText].map(c => c.charCodeAt(0))
-                });
-                
+            } else {                
                 englishCard.classList.add('error');
                 translationCard.classList.add('error');
                 
